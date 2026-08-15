@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -77,8 +78,8 @@ func (t *FileTail) sprint(msg string, timestamp string) (string, error) {
 }
 
 // Print prints a color coded log message
-func (t *FileTail) Print(msg string) {
-	buf, err := t.sprint(msg, "")
+func (t *FileTail) Print(msg string, timestamp string) {
+	buf, err := t.sprint(msg, timestamp)
 	if err != nil {
 		fmt.Fprintf(t.errOut, "%s\n", err)
 		return
@@ -105,5 +106,17 @@ func (t *FileTail) consumeLine(line string) {
 		return
 	}
 
-	t.Print(content)
+	var timestamp string
+	if t.Options.Timestamps {
+		// stdin lines carry no timestamp of their own (unlike k8s API log
+		// lines), so use the current time as the timestamp source.
+		updatedTs, err := t.Options.UpdateTimezoneAndFormat(time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			t.Print(fmt.Sprintf("[%v] %s", err, content), "")
+			return
+		}
+		timestamp = updatedTs
+	}
+
+	t.Print(content, timestamp)
 }
