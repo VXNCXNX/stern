@@ -108,9 +108,16 @@ func (t *FileTail) consumeLine(line string) {
 
 	var timestamp string
 	if t.Options.Timestamps {
-		// stdin lines carry no timestamp of their own (unlike k8s API log
-		// lines), so use the current time as the timestamp source.
-		updatedTs, err := t.Options.UpdateTimezoneAndFormat(time.Now().UTC().Format(time.RFC3339Nano))
+		// A piped line may already carry its own timestamp, as anything coming
+		// from `kubectl logs --timestamps` does. Reuse it rather than prefixing a
+		// second one, and fall back to the current time for lines that have none.
+		rfc3339Nano, rest, ok := splitLogLineIfTimestamped(content)
+		if ok {
+			content = rest
+		} else {
+			rfc3339Nano = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		updatedTs, err := t.Options.UpdateTimezoneAndFormat(rfc3339Nano)
 		if err != nil {
 			t.Print(fmt.Sprintf("[%v] %s", err, content), "")
 			return
